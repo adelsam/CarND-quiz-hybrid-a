@@ -2,6 +2,7 @@
 #include <sstream>
 #include <fstream>
 #include <math.h>
+#include <algorithm>
 #include <vector>
 #include "hybrid_breadth_first.h"
 
@@ -17,16 +18,19 @@ HBF::HBF() {
 
 HBF::~HBF() {}
 
+bool compareByF(const HBF::maze_s &a, const HBF::maze_s &b) {
+  return a.f < b.f;
+}
 
-int HBF::theta_to_stack_number(double theta){
+int HBF::theta_to_stack_number(double theta) {
   /*
   Takes an angle (in radians) and returns which "stack" in the 3D configuration space
   this angle corresponds to. Angles near 0 go in the lower stacks while angles near
   2 * pi go in the higher stacks.
   */
 
-  double new_theta = fmod((theta + 2 * M_PI),(2 * M_PI));
-  int stack_number = (int)(round(new_theta * NUM_THETA_CELLS / (2*M_PI))) % NUM_THETA_CELLS;
+  double new_theta = fmod((theta + 2 * M_PI), (2 * M_PI));
+  int stack_number = (int) (round(new_theta * NUM_THETA_CELLS / (2 * M_PI))) % NUM_THETA_CELLS;
   return stack_number;
 }
 
@@ -41,28 +45,32 @@ int HBF::idx(double float_num) {
 }
 
 
-vector<HBF::maze_s> HBF::expand(HBF::maze_s state) {
+vector<HBF::maze_s> HBF::expand(HBF::maze_s state, vector<vector<int> > heuristic) {
   int g = state.g;
   double x = state.x;
   double y = state.y;
   double theta = state.theta;
 
-  int g2 = g+1;
+  int g2 = g + 1;
   vector<HBF::maze_s> next_states;
-  for(double delta_i = -35; delta_i < 40; delta_i+=5)
-  {
+  for (double delta_i = -35; delta_i < 40; delta_i += 5) {
 
     double delta = M_PI / 180.0 * delta_i;
     double omega = SPEED / LENGTH * tan(delta);
     double theta2 = theta + omega;
-    if(theta2 > 0)
-    {
-      theta2 += 2*M_PI;
+    if (theta2 > 0) {
+      theta2 += 2 * M_PI;
     }
     double x2 = x + SPEED * cos(theta2);
     double y2 = y + SPEED * sin(theta2);
     HBF::maze_s state2;
     state2.g = g2;
+
+    int hx2 = max(0, min((int) x2, 15));
+    int hy2 = max(0, min((int) y2, 15));
+    int h = heuristic[hx2][hy2];
+
+    state2.f = g2 + h;
     state2.x = x2;
     state2.y = y2;
     state2.theta = theta2;
@@ -72,7 +80,8 @@ vector<HBF::maze_s> HBF::expand(HBF::maze_s state) {
   return next_states;
 }
 
-vector< HBF::maze_s> HBF::reconstruct_path(vector< vector< vector<HBF::maze_s> > > came_from, vector<double> start, HBF::maze_s final){
+vector<HBF::maze_s>
+HBF::reconstruct_path(vector<vector<vector<HBF::maze_s> > > came_from, vector<double> start, HBF::maze_s final) {
 
   vector<maze_s> path = {final};
 
@@ -84,8 +93,7 @@ vector< HBF::maze_s> HBF::reconstruct_path(vector< vector< vector<HBF::maze_s> >
 
   double x = current.x;
   double y = current.y;
-  while( x != start[0] && y != start[1] )
-  {
+  while (x != start[0] && y != start[1]) {
     path.push_back(current);
     current = came_from[stack][idx(x)][idx(y)];
     x = current.x;
@@ -97,22 +105,29 @@ vector< HBF::maze_s> HBF::reconstruct_path(vector< vector< vector<HBF::maze_s> >
 
 }
 
-HBF::maze_path HBF::search(vector< vector<int> > grid, vector<double> start, vector<int> goal) {
+HBF::maze_path HBF::search(vector<vector<int, allocator<int>>, allocator<vector<int, allocator<int>>>> grid,
+                           vector<vector<int, allocator<int>>, allocator<vector<int, allocator<int>>>> heuristic,
+                           vector<double, allocator<double>> start, vector<int, allocator<int>> goal) {
   /*
   Working Implementation of breadth first search. Does NOT use a heuristic
   and as a result this is pretty inefficient. Try modifying this algorithm
   into hybrid A* by adding heuristics appropriately.
   */
 
-  vector< vector< vector<maze_s> > > closed(NUM_THETA_CELLS, vector<vector<maze_s>>(grid[0].size(), vector<maze_s>(grid.size())));
-  vector< vector< vector<int> > > closed_value(NUM_THETA_CELLS, vector<vector<int>>(grid[0].size(), vector<int>(grid.size())));
-  vector< vector< vector<maze_s> > > came_from(NUM_THETA_CELLS, vector<vector<maze_s>>(grid[0].size(), vector<maze_s>(grid.size())));
+  vector<vector<vector<maze_s> > > closed(NUM_THETA_CELLS,
+                                          vector<vector<maze_s>>(grid[0].size(), vector<maze_s>(grid.size())));
+  vector<vector<vector<int> > > closed_value(NUM_THETA_CELLS,
+                                             vector<vector<int>>(grid[0].size(), vector<int>(grid.size())));
+  vector<vector<vector<maze_s> > > came_from(NUM_THETA_CELLS,
+                                             vector<vector<maze_s>>(grid[0].size(), vector<maze_s>(grid.size())));
   double theta = start[2];
   int stack = theta_to_stack_number(theta);
   int g = 0;
 
   maze_s state;
   state.g = g;
+  int h = heuristic[start[0]][start[1]];
+  state.f = g + h;
   state.x = start[0];
   state.y = start[1];
 
@@ -122,17 +137,15 @@ HBF::maze_path HBF::search(vector< vector<int> > grid, vector<double> start, vec
   int total_closed = 1;
   vector<maze_s> opened = {state};
   bool finished = false;
-  while(!opened.empty())
-  {
-
+  while (!opened.empty()) {
+    std::sort(opened.begin(), opened.end(), compareByF);
     maze_s next = opened[0]; //grab first elment
     opened.erase(opened.begin()); //pop first element
 
     int x = next.x;
     int y = next.y;
 
-    if(idx(x) == goal[0] && idx(y) == goal[1])
-    {
+    if (idx(x) == goal[0] && idx(y) == goal[1]) {
       cout << "found path to goal in " << total_closed << " expansions" << endl;
       maze_path path;
       path.closed = closed;
@@ -141,27 +154,26 @@ HBF::maze_path HBF::search(vector< vector<int> > grid, vector<double> start, vec
       return path;
 
     }
-    vector<maze_s> next_state = expand(next);
+    vector<maze_s> next_state = expand(next, heuristic);
 
-    for(int i = 0; i < next_state.size(); i++)
-    {
+    for (int i = 0; i < next_state.size(); i++) {
       int g2 = next_state[i].g;
+      int f2 = next_state[i].f;
       double x2 = next_state[i].x;
       double y2 = next_state[i].y;
       double theta2 = next_state[i].theta;
 
-      if((x2 < 0 || x2 >= grid.size()) || (y2 < 0 || y2 >= grid[0].size()))
-      {
+      if ((x2 < 0 || x2 >= grid.size()) || (y2 < 0 || y2 >= grid[0].size())) {
         //invalid cell
         continue;
       }
       int stack2 = theta_to_stack_number(theta2);
 
-      if(closed_value[stack2][idx(x2)][idx(y2)] == 0 && grid[idx(x2)][idx(y2)] == 0)
-      {
+      if (closed_value[stack2][idx(x2)][idx(y2)] == 0 && grid[idx(x2)][idx(y2)] == 0) {
 
         maze_s state2;
         state2.g = g2;
+        state2.f = f2;
         state2.x = x2;
         state2.y = y2;
         state2.theta = theta2;

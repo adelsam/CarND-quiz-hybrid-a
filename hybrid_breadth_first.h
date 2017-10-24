@@ -17,7 +17,7 @@ public:
 	double LENGTH = 0.5;
 
 	struct maze_s {
-
+    int f;  // h(x,y) + g
 		int g;	// iteration
 		double x;
 		double y;
@@ -48,9 +48,11 @@ public:
 
   	int idx(double float_num);
 
-  	vector<maze_s> expand(maze_s state);
+  	vector<maze_s> expand(maze_s state, vector< vector<int> > heuristic);
 
-  	maze_path search(vector< vector<int> > grid, vector<double> start, vector<int> goal);
+  	maze_path search(vector<vector<int, allocator<int>>, allocator<vector<int, allocator<int>>>> grid,
+                         vector<vector<int, allocator<int>>, allocator<vector<int, allocator<int>>>> start,
+                         vector<double, allocator<double>> goal, vector<int, allocator<int>> vector1);
 
   	vector<maze_s> reconstruct_path(vector< vector< vector<maze_s> > > came_from, vector<double> start, HBF::maze_s final);
 
